@@ -1,0 +1,7 @@
+# config.py
+
+RECORDINGS_DIR = "recordings"
+MAX_RECORDINGS = 5
+SAMPLE_RATE = 16000
+CHANNELS = 1
+FRAME_DURATION = 30  # ms

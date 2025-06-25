@@ -1,3 +1,7 @@
 pvporcupine
 sounddevice
 python-dotenv
+wavio
+numpy
+webrtcvad
+setuptools
