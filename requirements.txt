@@ -5,3 +5,4 @@ wavio
 numpy
 webrtcvad
 setuptools
+git+https://github.com/openai/whisper.git

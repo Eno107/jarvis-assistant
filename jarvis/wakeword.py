@@ -11,6 +11,7 @@ from collections import deque
 import glob
 import re
 
+from jarvis.transcribe import transcribe_audio
 from jarvis.config import RECORDINGS_DIR, MAX_RECORDINGS, SAMPLE_RATE, CHANNELS, FRAME_DURATION
 
 load_dotenv()
@@ -102,6 +103,8 @@ def start_wakeword_detection():
         audio_path = record_command_until_silent()
         if audio_path is not None:
             print("[Jarvis] Audio recorded. Ready for transcription.")
+            text = transcribe_audio(audio_path)
+            print(f"[Jarvis] Transcribed: {text}")
             # Future: pass audio_path to Whisper or other LLM
 
     def audio_callback(indata, frames, time, status):
