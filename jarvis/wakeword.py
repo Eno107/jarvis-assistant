@@ -13,6 +13,7 @@ import re
 
 from jarvis.transcribe import transcribe_audio
 from jarvis.config import RECORDINGS_DIR, MAX_RECORDINGS, SAMPLE_RATE, CHANNELS, FRAME_DURATION
+from jarvis.llm import process_command
 
 load_dotenv()
 ACCESS_KEY = os.getenv("PORCUPINE_ACCESS_KEY")
@@ -105,7 +106,11 @@ def start_wakeword_detection():
             print("[Jarvis] Audio recorded. Ready for transcription.")
             text = transcribe_audio(audio_path)
             print(f"[Jarvis] Transcribed: {text}")
-            # Future: pass audio_path to Whisper or other LLM
+            
+            # Process the command with Ollama
+            response = process_command(text)
+            print(f"[Jarvis] Response: {response}")
+            # Future: Add text-to-speech for the response
 
     def audio_callback(indata, frames, time, status):
         pcm = struct.unpack_from("h" * porcupine.frame_length, indata)
