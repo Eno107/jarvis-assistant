@@ -8,3 +8,4 @@ setuptools
 git+https://github.com/openai/whisper.git
 ollama-python
 ollama
+pyttsx3
