@@ -46,47 +46,92 @@ def get_next_recording_filename():
     return os.path.join(RECORDINGS_DIR, f"recording_{next_number}.wav")
 
 
-def record_command_until_silent(timeout=10, silence_threshold=0.8):
+def record_command_until_silent(timeout=30, silence_threshold=1.0):
     print("[Jarvis] Recording command...")
 
-    vad = webrtcvad.Vad(2)  # Aggressiveness from 0 to 3
+    vad = webrtcvad.Vad(2)  # Slightly more aggressive for better silence detection
     voiced_frames = []
-    silence_duration = 0
+    silence_frame_count = 0
     recording_started = False
+    total_frames = 0
+    
+    # Simplified approach - process each callback frame directly
+    frames_per_second = SAMPLE_RATE / FRAME_SIZE
+    silence_frames_needed = int(silence_threshold * frames_per_second)
+    
+    print(f"[Jarvis] Will stop after {silence_frames_needed} silent frames ({silence_threshold}s) or {timeout}s timeout")
 
     def callback(indata, frames, time, status):
-        nonlocal silence_duration, recording_started, voiced_frames
+        nonlocal silence_frame_count, recording_started, voiced_frames, total_frames
 
-        frame = indata[:, 0].tobytes()
-
-        if vad.is_speech(frame, SAMPLE_RATE):
-            if not recording_started:
-                print("[Jarvis] Detected voice, starting capture...")
-            recording_started = True
-            silence_duration = 0
-            voiced_frames.append(indata.copy())
-        elif recording_started:
-            silence_duration += FRAME_DURATION / 1000
-            if silence_duration >= silence_threshold:
-                print("[Jarvis] Silence detected. Stopping capture.")
+        total_frames += 1
+        
+        # Convert to int16 for VAD
+        audio_data = (indata[:, 0] * 32767).astype(np.int16)
+        
+        # Pad or trim to exact VAD frame size (480 samples for 30ms at 16kHz)
+        vad_samples = 480
+        if len(audio_data) > vad_samples:
+            vad_frame = audio_data[:vad_samples]
+        elif len(audio_data) < vad_samples:
+            # Pad with zeros
+            vad_frame = np.pad(audio_data, (0, vad_samples - len(audio_data)), 'constant')
+        else:
+            vad_frame = audio_data
+            
+        try:
+            is_speech = vad.is_speech(vad_frame.tobytes(), SAMPLE_RATE)
+        except Exception as e:
+            print(f"[Jarvis] VAD error: {e}")
+            is_speech = True  # Assume speech on error
+        
+        if not recording_started:
+            if is_speech:
+                print(f"[Jarvis] Voice detected, starting recording...")
+                recording_started = True
+                silence_frame_count = 0
+                voiced_frames.append(indata.copy())
+            # Don't record anything until we detect speech
+            return
+        
+        # We're recording now
+        voiced_frames.append(indata.copy())
+        
+        if is_speech:
+            silence_frame_count = 0
+            if total_frames % 33 == 0:  # Log every ~1 second
+                print(f"[Jarvis] Recording... ({total_frames * 30 / 1000:.1f}s)")
+        else:
+            silence_frame_count += 1
+            if silence_frame_count == 1:  # Log when silence starts
+                print(f"[Jarvis] Silence detected, counting...")
+            elif silence_frame_count % 5 == 0:  # Log every ~150ms of silence
+                print(f"[Jarvis] Silent for {silence_frame_count * 30 / 1000:.1f}s")
+                
+            if silence_frame_count >= silence_frames_needed:
+                print(f"[Jarvis] {silence_threshold}s of silence detected. Stopping recording.")
                 raise sd.CallbackStop()
 
     try:
         with sd.InputStream(
             samplerate=SAMPLE_RATE,
-            blocksize=FRAME_SIZE,
-            dtype='int16',
+            blocksize=FRAME_SIZE,  # Use our configured frame size
+            dtype='float32',
             channels=CHANNELS,
             callback=callback,
         ):
             sd.sleep(timeout * 1000)
+        # If we reach here, timeout occurred
+        print(f"[Jarvis] {timeout}s timeout reached. Stopping recording.")
     except sd.CallbackStop:
         pass
 
     if not voiced_frames:
-        print("[Jarvis] No speech detected.")
+        print("[Jarvis] No speech detected during recording period.")
         return None
 
+    duration = len(voiced_frames) * 30 / 1000  # Convert frames to seconds
+    print(f"[Jarvis] Recording complete. Duration: {duration:.1f}s ({len(voiced_frames)} frames)")
     audio = np.concatenate(voiced_frames, axis=0)
 
     filename = get_next_recording_filename()
